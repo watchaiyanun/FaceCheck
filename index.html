@@ -2,193 +2,251 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Meta Viewport: สำคัญมากสำหรับการรองรับมือถือ (Responsive) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ระบบลงทะเบียนการประชุมอัจฉริยะ (Smart Meeting Check-in)</title>
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Face-API.js -->
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (Excel Export) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <!-- FontAwesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <!-- Google Fonts (Sarabun for Thai Official look) -->
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
         body { font-family: 'Sarabun', sans-serif; background-color: #0f172a; color: #f8fafc; overflow-x: hidden; }
         
-        /* Official Police Theme Colors */
+        /* Official Police Theme Colors & Effects */
         .bg-police { background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%); }
         .text-gold { color: #fbbf24; }
         .border-gold { border-color: #fbbf24; }
-        .vip-glow { box-shadow: 0 0 25px rgba(251, 191, 36, 0.6); border: 2px solid #fbbf24 !important; }
+        .vip-glow { box-shadow: 0 0 35px rgba(251, 191, 36, 0.8); border: 2px solid #fbbf24 !important; }
         
-        /* Video Container */
+        /* Responsive Video Container & Sci-Fi Scanner */
         #video-container {
-            position: relative; width: 100%; max-width: 720px; margin: 0 auto;
+            position: relative; width: 100%; max-width: 100%; margin: 0 auto;
             border-radius: 1rem; overflow: hidden; background-color: #000;
             box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); border: 4px solid #334155;
             transition: all 0.3s ease;
         }
-        #video { width: 100%; height: auto; display: block; object-fit: cover; transform: scaleX(-1); /* Mirror effect */ }
-        canvas.face-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+        /* Make video responsive and cover the area */
+        #video { width: 100%; height: auto; display: block; object-fit: cover; transform: scaleX(-1); max-height: 60vh; }
+        canvas.face-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
         
-        /* Kiosk Badge Animation */
-        #badge-overlay { backdrop-filter: blur(8px); }
-        .badge-enter { animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
-        @keyframes popIn {
-            0% { transform: scale(0.5) translateY(100px); opacity: 0; }
-            100% { transform: scale(1) translateY(0); opacity: 1; }
+        /* Sci-Fi Scanner Laser Animation */
+        .scanner-laser {
+            position: absolute; width: 100%; height: 2px;
+            background: linear-gradient(to right, transparent, #3b82f6, transparent);
+            box-shadow: 0 0 10px #3b82f6;
+            animation: scanline 2.5s infinite linear;
+            display: none; z-index: 10;
+        }
+        @keyframes scanline {
+            0% { top: 10%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 90%; opacity: 0; }
         }
 
-        /* Loaders and Toasts */
+        #badge-overlay { backdrop-filter: blur(8px); }
+        .badge-enter { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn { 0% { transform: scale(0.5) translateY(50px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+
         .loader { border: 4px solid #334155; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
         .toast { transition: all 0.3s ease; opacity: 0; transform: translateY(-20px); pointer-events: none; }
         .toast.show { opacity: 1; transform: translateY(0); }
-        
         .modal-backdrop { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(5px); }
         
-        /* Signature Pad */
-        #sig-canvas { border: 2px dashed #94a3b8; border-radius: 0.5rem; background-color: #f8fafc; cursor: crosshair; touch-action: none; }
+        /* Table Custom Scrollbar for Mobile */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        #sig-canvas { border: 2px dashed #94a3b8; border-radius: 0.5rem; background-color: #f8fafc; cursor: crosshair; touch-action: none; max-width: 100%; }
+
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; color: #000 !important; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; background: white; border: none; box-shadow: none; overflow: visible; }
+            .no-print { display: none !important; }
+            .print-table { border-collapse: collapse; width: 100%; }
+            .print-table th, .print-table td { border: 1px solid #000 !important; padding: 8px !important; text-align: left; }
+            .print-table th { background-color: #f3f4f6 !important; font-weight: bold; }
+            .bg-slate-800 { background: white !important; }
+        }
     </style>
 </head>
 
 <body class="h-screen flex flex-col">
 
-    <!-- Top Navigation -->
-    <nav class="bg-police shadow-2xl border-b border-blue-900 p-4 flex-none z-40 relative">
-        <div class="container mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-            <div class="flex items-center gap-3">
-                <i class="fa-solid fa-shield-halved text-4xl text-gold"></i>
-                <div>
-                    <h1 class="text-xl md:text-2xl font-bold text-white tracking-wide">SMART MEETING REGISTRATION</h1>
-                    <p class="text-xs text-blue-300">ระบบลงทะเบียนการประชุมอัจฉริยะ</p>
+    <!-- Navbar: Responsive Layout -->
+    <nav class="bg-police shadow-2xl border-b border-blue-900 p-3 md:p-4 flex-none z-40 relative no-print">
+        <div class="container mx-auto flex flex-col md:flex-row justify-between items-center gap-3 md:gap-4">
+            <div class="flex items-center gap-3 w-full md:w-auto justify-center md:justify-start">
+                <i class="fa-solid fa-shield-halved text-3xl md:text-4xl text-gold"></i>
+                <div class="text-center md:text-left">
+                    <h1 class="text-lg md:text-2xl font-bold text-white tracking-wide leading-tight">SMART MEETING</h1>
+                    <p class="text-[10px] md:text-xs text-blue-300">ระบบลงทะเบียนการประชุมอัจฉริยะ</p>
                 </div>
             </div>
             
-            <!-- Meeting Selector -->
-            <div class="flex-grow flex justify-center items-center gap-3 bg-slate-800/50 p-2 rounded-lg border border-slate-700">
-                <label for="meeting-select" class="text-sm font-semibold text-blue-200"><i class="fa-solid fa-users-rectangle"></i> หัวข้อการประชุม:</label>
-                <select id="meeting-select" onchange="changeMeeting()" class="bg-slate-900 border border-blue-600 text-white text-sm rounded-lg focus:ring-gold focus:border-gold block p-2 outline-none min-w-[250px]">
+            <div class="flex-grow flex flex-col sm:flex-row justify-center items-center gap-2 w-full md:w-auto bg-slate-800/50 p-2 rounded-lg border border-slate-700">
+                <select id="meeting-select" onchange="changeMeeting()" class="w-full sm:w-auto bg-slate-900 border border-blue-600 text-white text-sm rounded-lg focus:ring-gold focus:border-gold p-2 outline-none">
                     <option value="">-- กรุณาสร้างหรือเลือกการประชุม --</option>
                 </select>
-                <button onclick="openNewMeetingModal()" class="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded text-sm font-bold transition flex items-center gap-1 shadow-[0_0_10px_rgba(37,99,235,0.5)]">
+                <button onclick="openNewMeetingModal()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded text-sm font-bold transition flex items-center justify-center gap-1 shadow-[0_0_10px_rgba(37,99,235,0.5)]">
                     <i class="fa-solid fa-plus"></i> สร้าง
                 </button>
             </div>
 
-            <div class="flex items-center gap-4">
-                <div id="status-badge" class="bg-slate-700 text-slate-300 border border-slate-600 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-2">
-                    <i class="fa-solid fa-spinner fa-spin"></i> รอโหลด AI...
+            <div class="flex justify-between md:justify-end w-full md:w-auto items-center gap-2 md:gap-4">
+                <div id="status-badge" class="bg-slate-700 text-slate-300 border border-slate-600 text-[10px] md:text-xs font-bold px-2 md:px-3 py-1 md:py-1.5 rounded-full flex items-center gap-1 md:gap-2">
+                    <i class="fa-solid fa-spinner fa-spin"></i> รอโหลด...
                 </div>
-                <button onclick="promptAdminLogin()" class="bg-slate-800 border border-slate-600 hover:bg-slate-700 px-4 py-2 rounded text-sm font-bold transition flex items-center gap-2">
-                    <i class="fa-solid fa-chart-line text-blue-400"></i> สถิติ / แอดมิน
+                <button onclick="promptAdminLogin()" class="bg-slate-800 border border-slate-600 hover:bg-slate-700 px-3 py-1.5 md:py-2 rounded text-xs md:text-sm font-bold transition flex items-center gap-1 md:gap-2">
+                    <i class="fa-solid fa-chart-pie text-blue-400"></i> แอดมิน
                 </button>
             </div>
         </div>
     </nav>
 
-    <!-- MAIN APP VIEW -->
-    <main id="main-app" class="container mx-auto flex-grow p-4 flex flex-col xl:flex-row gap-6 overflow-hidden">
+    <!-- Main Content: Mobile First Stacked (col) -> Desktop Side-by-side (row) -->
+    <main id="main-app" class="container mx-auto flex-grow p-3 md:p-4 flex flex-col lg:flex-row gap-4 md:gap-6 overflow-hidden">
         
         <!-- Left Column: Camera and Registration -->
-        <div class="w-full xl:w-5/12 flex flex-col gap-4">
-            
-            <!-- Camera Section -->
-            <div class="bg-slate-800 p-5 rounded-2xl shadow-xl flex-grow flex flex-col border border-slate-700 relative overflow-hidden">
+        <div class="w-full lg:w-5/12 xl:w-4/12 flex flex-col gap-4 no-print shrink-0 overflow-y-auto lg:overflow-hidden pb-4 lg:pb-0">
+            <div class="bg-slate-800 p-4 md:p-5 rounded-2xl shadow-xl flex flex-col border border-slate-700 relative overflow-hidden">
                 <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-gold to-blue-500"></div>
                 
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-expand text-blue-400"></i> จุดสแกนใบหน้า (Kiosk)
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-expand text-blue-400"></i> จุดสแกน
                     </h2>
-                    <button onclick="document.getElementById('pin-modal').classList.remove('hidden')" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 py-1.5 px-3 rounded flex items-center gap-1 transition">
-                        <i class="fa-solid fa-keyboard text-gold"></i> รหัสสำรอง
+                    <button onclick="document.getElementById('pin-modal').classList.remove('hidden')" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 py-1 px-2 md:py-1.5 md:px-3 rounded flex items-center gap-1 transition">
+                        <i class="fa-solid fa-keyboard text-gold"></i> รหัส PIN
                     </button>
                 </div>
                 
-                <div id="video-container" class="flex-grow flex items-center justify-center relative bg-slate-900 rounded-xl">
+                <div id="video-container" class="flex items-center justify-center relative bg-slate-900 rounded-xl">
                     <div id="video-loader" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 z-10">
-                        <div class="loader mb-4"></div>
-                        <p class="font-medium">กำลังเชื่อมต่อกล้องวงจรปิด...</p>
+                        <div class="loader mb-2 md:mb-4"></div>
+                        <p class="font-medium text-xs md:text-sm">กำลังเชื่อมต่อกล้อง...</p>
                     </div>
-                    <!-- Hidden canvas for capturing live photo for the badge -->
+                    <div id="scanner-laser" class="scanner-laser"></div>
                     <canvas id="snapshot-canvas" class="hidden"></canvas>
                     <video id="video" autoplay muted playsinline></video>
                 </div>
 
-                <div class="mt-5 grid grid-cols-2 gap-3">
-                    <button id="btn-scan" class="col-span-2 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 hover:to-blue-700 text-white py-4 rounded-xl font-bold text-lg transition shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed border border-blue-500" disabled>
-                        <i class="fa-solid fa-face-viewfinder text-2xl"></i> เริ่มระบบสแกนอัตโนมัติ
+                <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
+                    <button id="btn-scan" class="sm:col-span-2 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 hover:to-blue-700 text-white py-3 md:py-4 rounded-xl font-bold text-base md:text-lg transition shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed border border-blue-500" disabled>
+                        <i class="fa-solid fa-crosshairs text-xl md:text-2xl"></i> เริ่มระบบสแกน
                     </button>
-                    <button id="btn-register-mode" class="col-span-2 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold transition flex items-center justify-center gap-2 border border-slate-600 disabled:opacity-50" disabled>
-                        <i class="fa-solid fa-user-plus text-green-400"></i> เพิ่มข้อมูลบุคลากร / แขกรับเชิญ
+                    <button id="btn-register-mode" class="sm:col-span-2 bg-slate-700 hover:bg-slate-600 text-white py-2.5 md:py-3 rounded-xl text-sm md:text-base font-bold transition flex items-center justify-center gap-2 border border-slate-600 disabled:opacity-50" disabled>
+                        <i class="fa-solid fa-user-plus text-green-400"></i> เพิ่มบุคลากรใหม่
                     </button>
                 </div>
-                <p class="text-center text-xs text-slate-400 mt-4 font-light">
-                    <i class="fa-solid fa-circle-info text-blue-400"></i> ระบบบังคับการขยับใบหน้า (Liveness) เพื่อความปลอดภัยระดับสูง
-                </p>
             </div>
 
-            <!-- Registration Form Panel -->
-            <div id="registration-panel" class="bg-slate-800 p-5 rounded-2xl shadow-xl hidden border border-slate-700 relative">
-                <button id="btn-cancel-register" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
-                <h3 class="text-lg font-bold mb-1 text-gold"><i class="fa-solid fa-id-card-clip"></i> ลงทะเบียนข้อมูลส่วนบุคคล</h3>
-                <p class="text-xs text-slate-400 mb-4">กรุณาจัดใบหน้าให้อยู่ในกรอบ และมองตรงมาที่กล้อง</p>
+            <!-- Registration Form (Responsive) -->
+            <div id="registration-panel" class="bg-slate-800 p-4 md:p-5 rounded-2xl shadow-xl hidden border border-slate-700 relative">
+                <button id="btn-cancel-register" class="absolute top-3 right-3 md:top-4 md:right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg md:text-xl"></i></button>
+                <h3 class="text-base md:text-lg font-bold mb-2 text-gold"><i class="fa-solid fa-id-card-clip"></i> ลงทะเบียนข้อมูล</h3>
                 
-                <div class="space-y-3 text-sm">
+                <div class="space-y-2 text-xs md:text-sm mt-2">
                     <div>
-                        <label class="block text-slate-300 text-xs mb-1">ประเภทบุคคล</label>
-                        <select id="reg-type" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white focus:border-gold outline-none">
+                        <select id="reg-type" class="w-full bg-slate-900 border border-slate-600 rounded px-2 md:px-3 py-2 text-white outline-none">
                             <option value="police">ข้าราชการตำรวจ / เจ้าหน้าที่</option>
                             <option value="guest">บุคคลภายนอก / แขกรับเชิญ</option>
                         </select>
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <input type="text" id="reg-rank" placeholder="ยศ / คำนำหน้า (เช่น พล.ต.ต. / นาย)" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 focus:border-gold outline-none col-span-2">
-                        <input type="text" id="reg-fname" placeholder="ชื่อจริง" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 focus:border-gold outline-none">
-                        <input type="text" id="reg-lname" placeholder="นามสกุล" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 focus:border-gold outline-none">
-                        <input type="text" id="reg-position" placeholder="ตำแหน่ง / สังกัด" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 focus:border-gold outline-none col-span-2">
-                        <input type="tel" id="reg-phone" placeholder="เบอร์โทรศัพท์" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 focus:border-gold outline-none">
-                        <input type="password" id="reg-pin" placeholder="PIN 4 หลัก" maxlength="4" class="bg-slate-900 border border-slate-600 rounded px-3 py-2 focus:border-gold outline-none text-center font-mono tracking-widest">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="reg-rank" placeholder="ยศ/คำนำหน้า" class="bg-slate-900 border border-slate-600 rounded px-2 md:px-3 py-2 text-white col-span-2">
+                        <input type="text" id="reg-fname" placeholder="ชื่อจริง *" class="bg-slate-900 border border-slate-600 rounded px-2 md:px-3 py-2 text-white">
+                        <input type="text" id="reg-lname" placeholder="นามสกุล *" class="bg-slate-900 border border-slate-600 rounded px-2 md:px-3 py-2 text-white">
+                        <input type="text" id="reg-position" placeholder="ตำแหน่ง/สังกัด" class="bg-slate-900 border border-slate-600 rounded px-2 md:px-3 py-2 text-white col-span-2">
+                        <input type="tel" id="reg-phone" placeholder="เบอร์โทรศัพท์" class="bg-slate-900 border border-slate-600 rounded px-2 md:px-3 py-2 text-white">
+                        <input type="password" id="reg-pin" placeholder="PIN 4 หลัก *" maxlength="4" class="bg-slate-900 border border-slate-600 rounded px-2 md:px-3 py-2 text-white text-center font-mono">
                     </div>
                 </div>
-                <div class="mt-4">
-                    <button id="btn-save-face" class="w-full bg-green-600 hover:bg-green-500 text-white px-4 py-3 rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-camera-retro"></i> บันทึกใบหน้าเข้าสู่ระบบ
+                <div class="mt-3 md:mt-4">
+                    <button id="btn-save-face" class="w-full bg-green-600 hover:bg-green-500 text-white px-3 md:px-4 py-2.5 md:py-3 rounded-xl text-sm md:text-base font-bold transition shadow-lg flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-camera-retro"></i> สแกนเพื่อบันทึก
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- Right Column: Logs & Signatures -->
-        <div class="w-full xl:w-7/12 flex flex-col gap-4 overflow-hidden">
-            <div class="bg-slate-800 rounded-2xl shadow-xl flex-grow flex flex-col overflow-hidden border border-slate-700">
-                <div class="p-4 border-b border-slate-700 bg-slate-800/80 flex justify-between items-center">
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2" id="table-meeting-title">
-                        <i class="fa-solid fa-folder-open text-blue-400"></i> กรุณาเลือกการประชุม
+        <!-- Right Column: Stats & Table -->
+        <div class="w-full lg:w-7/12 xl:w-8/12 flex flex-col gap-4 overflow-hidden min-h-[400px]">
+            
+            <!-- Live Stats Header (Responsive Grid) -->
+            <div class="grid grid-cols-3 gap-2 md:gap-4 no-print flex-none">
+                <div class="bg-slate-800 p-2 md:p-4 rounded-xl border border-slate-700 shadow-md text-center md:text-left flex md:items-center md:justify-between flex-col md:flex-row">
+                    <div>
+                        <p class="text-slate-400 text-[10px] md:text-xs font-bold">มีสิทธิ์เข้าร่วม</p>
+                        <h3 class="text-xl md:text-2xl font-bold text-white" id="stat-total-reg">0</h3>
+                    </div>
+                    <i class="fa-solid fa-users text-2xl md:text-3xl text-blue-900/50 hidden md:block"></i>
+                </div>
+                <div class="bg-slate-800 p-2 md:p-4 rounded-xl border border-blue-900 shadow-md text-center md:text-left flex md:items-center md:justify-between flex-col md:flex-row shadow-[0_0_10px_rgba(34,197,94,0.1)]">
+                    <div>
+                        <p class="text-green-400 text-[10px] md:text-xs font-bold">มาแล้ว</p>
+                        <h3 class="text-xl md:text-2xl font-bold text-green-400" id="stat-total-in">0</h3>
+                    </div>
+                    <i class="fa-solid fa-user-check text-2xl md:text-3xl text-green-900/50 hidden md:block"></i>
+                </div>
+                <div class="bg-slate-800 p-2 md:p-4 rounded-xl border border-red-900 shadow-md text-center md:text-left flex md:items-center md:justify-between flex-col md:flex-row">
+                    <div>
+                        <p class="text-red-400 text-[10px] md:text-xs font-bold">ขาด</p>
+                        <h3 class="text-xl md:text-2xl font-bold text-red-400" id="stat-total-miss">0</h3>
+                    </div>
+                    <i class="fa-solid fa-user-xmark text-2xl md:text-3xl text-red-900/50 hidden md:block"></i>
+                </div>
+            </div>
+
+            <div id="print-area" class="bg-white rounded-xl shadow-xl flex-grow flex flex-col overflow-hidden border border-slate-300 relative">
+                <div class="p-3 md:p-4 border-b border-slate-300 bg-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 no-print">
+                    <h2 class="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2 text-center sm:text-left" id="doc-meeting-title">
+                        <i class="fa-regular fa-file-lines text-blue-600"></i> ใบเซ็นชื่อ
                     </h2>
-                    <span id="meeting-count-badge" class="bg-blue-900 border border-blue-500 text-blue-100 text-xs font-bold px-3 py-1 rounded-full shadow-inner">
-                        ผู้เข้าร่วม: 0 คน
-                    </span>
+                    <div class="flex gap-2 w-full sm:w-auto justify-center">
+                        <button onclick="exportToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 md:px-3 md:py-1.5 rounded shadow text-xs md:text-sm font-bold flex items-center gap-1 transition flex-1 sm:flex-none justify-center">
+                            <i class="fa-solid fa-file-pdf"></i> PDF
+                        </button>
+                        <button onclick="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white px-2 py-1 md:px-3 md:py-1.5 rounded shadow text-xs md:text-sm font-bold flex items-center gap-1 transition flex-1 sm:flex-none justify-center">
+                            <i class="fa-solid fa-file-excel"></i> Excel
+                        </button>
+                    </div>
                 </div>
                 
-                <div class="overflow-x-auto overflow-y-auto flex-grow p-0 custom-scrollbar">
-                    <table class="w-full text-left border-collapse min-w-[850px]">
-                        <thead class="bg-slate-900 sticky top-0 z-10 border-b border-slate-700 shadow-md">
+                <div class="p-4 text-center text-black hidden no-print" id="print-doc-header" style="display: block;">
+                    <h1 class="text-lg md:text-xl font-bold mb-1">บัญชีรายชื่อผู้เข้าร่วมประชุม</h1>
+                    <p class="text-sm md:text-md font-medium" id="print-meeting-name">เรื่อง: _______________________</p>
+                    <p class="text-xs md:text-sm mt-1" id="print-meeting-date"></p>
+                </div>
+
+                <div class="overflow-x-auto flex-grow p-2 md:p-4 custom-scrollbar bg-slate-50">
+                    <table class="w-full text-left border-collapse print-table text-black min-w-[700px] md:min-w-full">
+                        <thead class="bg-slate-200 sticky top-0 z-10 border-b-2 border-slate-400">
                             <tr>
-                                <th class="p-4 text-sm font-bold text-slate-300 w-20 text-center">เวลา</th>
-                                <th class="p-4 text-sm font-bold text-slate-300">ข้อมูลผู้เข้าร่วม / สังกัด</th>
-                                <th class="p-4 text-sm font-bold text-slate-300 w-44">สถานะ (มาเอง/ผู้แทน)</th>
-                                <th class="p-4 text-sm font-bold text-slate-300 w-32 text-center">ลายมือชื่อ</th>
-                                <th class="p-4 text-sm font-bold text-slate-300 w-16 text-center"><i class="fa-solid fa-gear"></i></th>
+                                <th class="p-2 md:p-3 text-xs md:text-sm font-bold border border-slate-300 w-10 text-center">ที่</th>
+                                <th class="p-2 md:p-3 text-xs md:text-sm font-bold border border-slate-300 w-16 md:w-20 text-center">เวลา</th>
+                                <th class="p-2 md:p-3 text-xs md:text-sm font-bold border border-slate-300">ยศ-ชื่อ-สกุล</th>
+                                <th class="p-2 md:p-3 text-xs md:text-sm font-bold border border-slate-300 w-32 md:w-48">ตำแหน่ง</th>
+                                <th class="p-2 md:p-3 text-xs md:text-sm font-bold border border-slate-300 w-24 md:w-32 text-center">ลายมือชื่อ</th>
+                                <th class="p-2 md:p-3 text-xs md:text-sm font-bold border border-slate-300 w-32 md:w-40 text-center">สถานะ</th>
                             </tr>
                         </thead>
-                        <tbody id="attendance-log-body" class="text-sm divide-y divide-slate-700/50">
-                            <!-- Logs generated here via JS -->
+                        <tbody id="attendance-log-body" class="text-xs md:text-sm divide-y divide-slate-200 bg-white">
+                            <!-- Logs generated here -->
                         </tbody>
                     </table>
                 </div>
@@ -196,226 +254,167 @@
         </div>
     </main>
 
-    <!-- ==================== OVERLAYS & MODALS ==================== -->
-
-    <!-- Digital Badge Overlay (The WOW Feature) -->
-    <div id="badge-overlay" class="hidden fixed inset-0 z-[100] flex items-center justify-center">
-        <div id="badge-card" class="w-80 bg-white rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden transform scale-0 relative">
-            <!-- Header (Changes color based on VIP/Type) -->
-            <div id="badge-header" class="h-32 bg-blue-900 flex flex-col items-center justify-start pt-4 text-white relative overflow-hidden">
-                <i class="fa-solid fa-shield-halved text-5xl opacity-20 absolute -right-2 -bottom-4"></i>
-                <h3 class="font-bold text-lg tracking-wider" id="badge-type-label">ผู้เข้าร่วมการประชุม</h3>
+    <!-- Digital Badge Overlay -->
+    <div id="badge-overlay" class="hidden fixed inset-0 z-[100] flex items-center justify-center no-print px-4">
+        <div id="badge-card" class="w-full max-w-sm bg-white rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden transform scale-0 relative">
+            <div id="badge-header" class="h-24 md:h-32 bg-blue-900 flex flex-col items-center justify-start pt-3 md:pt-4 text-white relative overflow-hidden">
+                <i class="fa-solid fa-shield-halved text-4xl md:text-5xl opacity-20 absolute -right-2 -bottom-4"></i>
+                <h3 class="font-bold text-base md:text-lg tracking-wider" id="badge-type-label">ผู้เข้าร่วมการประชุม</h3>
             </div>
-            
-            <!-- Body -->
-            <div class="p-6 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-50 relative">
-                <!-- Live Captured Photo -->
-                <img id="badge-photo" src="" class="w-36 h-36 mx-auto rounded-full border-8 border-white -mt-24 shadow-xl object-cover bg-slate-200 relative z-10" />
-                
-                <div class="mt-4">
-                    <p id="badge-rank" class="text-sm font-bold text-blue-800 mb-1"></p>
-                    <h2 id="badge-name" class="text-2xl font-bold text-slate-800 mb-1 leading-tight"></h2>
-                    <p id="badge-position" class="text-xs text-slate-500 font-medium"></p>
+            <div class="p-4 md:p-6 text-center bg-slate-50 relative">
+                <img id="badge-photo" src="" class="w-24 h-24 md:w-32 md:h-32 mx-auto rounded-full border-[6px] border-white -mt-16 md:-mt-20 shadow-xl object-cover bg-slate-200 relative z-10" />
+                <div class="mt-3 md:mt-4">
+                    <p id="badge-rank" class="text-xs md:text-sm font-bold text-blue-800 mb-1"></p>
+                    <h2 id="badge-name" class="text-xl md:text-2xl font-bold text-slate-800 mb-1 leading-tight"></h2>
+                    <p id="badge-position" class="text-[10px] md:text-xs text-slate-500 font-medium line-clamp-2"></p>
                 </div>
-                
-                <div class="mt-6 border-t border-dashed border-slate-300 pt-4">
-                    <p class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Meeting Topic</p>
-                    <div id="badge-meeting" class="text-sm font-bold text-blue-900"></div>
-                    <div class="mt-3 bg-green-100 text-green-700 text-xs font-bold py-1 px-3 rounded-full inline-flex items-center gap-1">
-                        <i class="fa-solid fa-circle-check"></i> CHECKED IN
+                <div class="mt-4 md:mt-6 border-t border-dashed border-slate-300 pt-3 md:pt-4 flex flex-col items-center gap-2">
+                    <div class="bg-green-100 text-green-700 text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1 shadow-inner">
+                        <i class="fa-solid fa-circle-check"></i> ยืนยันตัวบุคคลสำเร็จ
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Admin Dashboard Modal -->
-    <div id="admin-modal" class="modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-            <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-900/50 rounded-t-2xl">
-                <h2 class="text-2xl font-bold text-white"><i class="fa-solid fa-chart-pie text-blue-400"></i> แดชบอร์ดผู้ดูแลระบบ (Admin)</h2>
-                <div class="flex gap-2">
-                    <button onclick="clearAllData()" class="bg-red-900/50 text-red-400 hover:bg-red-800 hover:text-white border border-red-700 px-4 py-2 rounded-lg font-bold text-sm transition">ล้างข้อมูลทั้งหมด</button>
-                    <button onclick="document.getElementById('admin-modal').classList.add('hidden')" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg font-bold text-sm text-white transition"><i class="fa-solid fa-xmark"></i> ปิด</button>
+    <!-- Admin Modal (With Import/Export) -->
+    <div id="admin-modal" class="modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4 no-print overflow-y-auto">
+        <div class="bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl w-full max-w-4xl p-4 md:p-6 my-4">
+            <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-3">
+                <h2 class="text-lg md:text-2xl font-bold text-white"><i class="fa-solid fa-chart-pie"></i> แดชบอร์ดผู้ดูแลระบบ</h2>
+                <div class="flex flex-wrap gap-2 justify-center">
+                    <button onclick="exportDatabase()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded font-bold text-xs"><i class="fa-solid fa-download"></i> Backup (ส่งออก)</button>
+                    <label class="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded font-bold text-xs cursor-pointer"><i class="fa-solid fa-upload"></i> Restore (นำเข้า)
+                        <input type="file" id="import-db-file" accept=".json" class="hidden" onchange="importDatabase(event)">
+                    </label>
+                    <button onclick="document.getElementById('admin-modal').classList.add('hidden')" class="bg-slate-600 text-white px-3 py-1.5 rounded font-bold text-xs">ปิด</button>
                 </div>
             </div>
-            
-            <div class="p-6 overflow-y-auto custom-scrollbar flex-grow">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-700 text-center shadow-inner">
-                        <h3 class="text-slate-400 font-bold text-xs uppercase mb-1">หัวข้อประชุม</h3>
-                        <p class="text-3xl font-bold text-white" id="stat-meetings">0</p>
-                    </div>
-                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-700 text-center shadow-inner">
-                        <h3 class="text-blue-400 font-bold text-xs uppercase mb-1">ผู้ลงทะเบียนทั้งหมด</h3>
-                        <p class="text-3xl font-bold text-white" id="stat-users">0</p>
-                    </div>
-                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-700 text-center shadow-inner">
-                        <h3 class="text-green-400 font-bold text-xs uppercase mb-1">มาประชุม (มาเอง)</h3>
-                        <p class="text-3xl font-bold text-white" id="stat-self">0</p>
-                    </div>
-                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-700 text-center shadow-inner">
-                        <h3 class="text-orange-400 font-bold text-xs uppercase mb-1">มาประชุม (ผู้แทน)</h3>
-                        <p class="text-3xl font-bold text-white" id="stat-proxy">0</p>
-                    </div>
-                </div>
-                <!-- Chart Container -->
-                <div class="h-80 w-full bg-slate-900 p-4 rounded-xl border border-slate-700">
-                    <canvas id="attendanceChart"></canvas>
-                </div>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                 <div class="bg-slate-900 p-3 rounded-xl text-center"><h3 class="text-slate-400 text-[10px] md:text-xs">หัวข้อประชุม</h3><p class="text-2xl md:text-3xl text-white font-bold" id="stat-meetings">0</p></div>
+                 <div class="bg-slate-900 p-3 rounded-xl text-center"><h3 class="text-slate-400 text-[10px] md:text-xs">ผู้ลงทะเบียน</h3><p class="text-2xl md:text-3xl text-white font-bold" id="stat-users">0</p></div>
+            </div>
+            <div class="h-48 md:h-64 w-full bg-slate-900 p-2 md:p-4 rounded-xl"><canvas id="attendanceChart"></canvas></div>
+            <div class="mt-4 text-center">
+                <button onclick="clearAllData()" class="bg-red-900/50 text-red-400 hover:bg-red-600 hover:text-white transition px-4 py-2 rounded-lg font-bold text-xs">ล้างฐานข้อมูลทั้งหมด (อันตราย)</button>
             </div>
         </div>
     </div>
 
-    <!-- New Meeting Modal -->
-    <div id="new-meeting-modal" class="modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-blue-500 rounded-xl shadow-2xl max-w-md w-full p-6">
-            <h2 class="text-xl font-bold mb-4 text-white"><i class="fa-solid fa-folder-plus text-blue-400"></i> สร้างการประชุมใหม่</h2>
-            <input type="text" id="new-meeting-title" placeholder="เช่น การประชุมประจำเดือน..." class="w-full bg-slate-900 text-white border border-slate-600 p-3 rounded-lg mb-5 focus:border-gold outline-none">
-            <div class="flex gap-3">
-                <button onclick="createNewMeeting()" class="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-500 transition">สร้าง</button>
-                <button onclick="document.getElementById('new-meeting-modal').classList.add('hidden')" class="flex-1 bg-slate-700 text-slate-300 py-2.5 rounded-lg font-bold hover:bg-slate-600 transition">ยกเลิก</button>
+    <!-- Modals (Meeting, PIN, E-Sig) -->
+    <div id="new-meeting-modal" class="modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
+        <div class="bg-slate-800 border border-blue-500 rounded-xl shadow-2xl max-w-sm w-full p-5">
+            <h2 class="text-lg font-bold mb-3 text-white"><i class="fa-solid fa-folder-plus text-blue-400"></i> สร้างการประชุมใหม่</h2>
+            <input type="text" id="new-meeting-title" placeholder="เช่น ประชุมประจำเดือน ก.ค." class="w-full bg-slate-900 text-sm text-white border border-slate-600 p-3 rounded-lg mb-4 outline-none">
+            <div class="flex gap-2">
+                <button onclick="createNewMeeting()" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold">สร้าง</button>
+                <button onclick="document.getElementById('new-meeting-modal').classList.add('hidden')" class="flex-1 bg-slate-700 text-slate-300 py-2 rounded-lg text-sm font-bold">ยกเลิก</button>
             </div>
         </div>
     </div>
 
-    <!-- PIN Check-in Modal -->
-    <div id="pin-modal" class="modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-sm w-full p-6">
-            <h2 class="text-xl font-bold mb-4 text-white"><i class="fa-solid fa-keyboard text-gold"></i> ลงทะเบียนด้วยรหัส PIN</h2>
-            <p class="text-xs text-slate-400 mb-4">ใช้ในกรณีกล้องมีปัญหา หรือสวมหน้ากากอนามัย</p>
-            <select id="pin-name-select" class="w-full bg-slate-900 text-white border border-slate-600 p-3 rounded-lg mb-4 outline-none"></select>
-            <input type="password" id="pin-input" placeholder="รหัส PIN 4 หลัก" maxlength="4" class="w-full bg-slate-900 text-white border border-slate-600 p-3 rounded-lg mb-5 text-center text-3xl font-mono tracking-widest focus:border-gold outline-none">
-            <div class="flex gap-3">
-                <button onclick="submitPinCheckin()" class="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-bold hover:bg-green-500 transition">ยืนยัน</button>
-                <button onclick="document.getElementById('pin-modal').classList.add('hidden')" class="flex-1 bg-slate-700 text-slate-300 py-2.5 rounded-lg font-bold hover:bg-slate-600 transition">ยกเลิก</button>
+    <div id="pin-modal" class="modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-sm w-full p-5">
+            <h2 class="text-lg font-bold mb-3 text-white"><i class="fa-solid fa-keyboard text-gold"></i> รหัสสำรอง (กล้องมีปัญหา)</h2>
+            <select id="pin-name-select" class="w-full bg-slate-900 text-sm text-white border border-slate-600 p-3 rounded-lg mb-3 outline-none"></select>
+            <input type="password" id="pin-input" placeholder="PIN 4 หลัก" maxlength="4" class="w-full bg-slate-900 text-white border border-slate-600 p-3 rounded-lg mb-4 text-center text-2xl tracking-widest outline-none">
+            <div class="flex gap-2">
+                <button onclick="submitPinCheckin()" class="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-bold">ยืนยัน</button>
+                <button onclick="document.getElementById('pin-modal').classList.add('hidden')" class="flex-1 bg-slate-700 text-slate-300 py-2 rounded-lg text-sm font-bold">ปิด</button>
             </div>
         </div>
     </div>
 
-    <!-- E-Signature Modal -->
-    <div id="signature-modal" class="modal-backdrop hidden fixed inset-0 z-[60] flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-lg w-full p-6">
-            <h2 class="text-xl font-bold mb-1 text-white"><i class="fa-solid fa-pen-nib text-blue-400"></i> ลงลายมือชื่ออิเล็กทรอนิกส์</h2>
-            <p class="text-sm text-gold font-medium mb-4" id="sig-modal-desc">ลายมือชื่อของ: ...</p>
-            
-            <div class="flex justify-center mb-4 bg-slate-900 p-2 rounded-xl">
-                <canvas id="sig-canvas" width="400" height="200" class="w-full max-w-[400px]"></canvas>
+    <div id="signature-modal" class="modal-backdrop hidden fixed inset-0 z-[60] flex items-center justify-center p-4 no-print">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-sm md:max-w-md w-full p-4 md:p-6">
+            <h2 class="text-lg font-bold mb-1 text-white"><i class="fa-solid fa-pen-nib text-blue-400"></i> ลงลายมือชื่อ</h2>
+            <p class="text-xs text-gold font-medium mb-3" id="sig-modal-desc">...</p>
+            <div class="flex justify-center mb-3 bg-slate-900 p-1 md:p-2 rounded-xl overflow-hidden">
+                <!-- Canvas is made fluid via CSS max-width: 100% -->
+                <canvas id="sig-canvas" width="400" height="200" class="bg-white w-full h-auto touch-none"></canvas>
             </div>
-            
-            <div class="flex flex-wrap sm:flex-nowrap gap-2">
-                <button onclick="clearSignatureCanvas()" class="w-full sm:w-auto bg-orange-900/50 text-orange-400 hover:bg-orange-800 border border-orange-700 px-4 py-2.5 rounded-lg font-bold transition">ล้าง</button>
-                <button onclick="saveSignature()" class="w-full sm:flex-1 bg-green-600 text-white py-2.5 rounded-lg font-bold hover:bg-green-500 transition">บันทึก</button>
-                <button onclick="closeSignatureModal()" class="w-full sm:w-auto bg-slate-700 text-slate-300 px-4 py-2.5 rounded-lg font-bold hover:bg-slate-600 transition">ยกเลิก</button>
+            <div class="flex gap-2">
+                <button onclick="clearSignatureCanvas()" class="w-auto bg-orange-900/50 text-orange-400 text-xs md:text-sm px-3 py-2 rounded-lg font-bold">ล้าง</button>
+                <button onclick="saveSignature()" class="flex-1 bg-green-600 text-white py-2 rounded-lg text-xs md:text-sm font-bold">บันทึก</button>
+                <button onclick="closeSignatureModal()" class="w-auto bg-slate-700 text-slate-300 px-3 py-2 rounded-lg text-xs md:text-sm font-bold">ยกเลิก</button>
             </div>
         </div>
     </div>
 
-    <!-- Toast Container -->
-    <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-[200] flex flex-col gap-2 pointer-events-none"></div>
+    <div id="toast-container" class="fixed top-3 left-1/2 transform -translate-x-1/2 z-[200] flex flex-col gap-2 pointer-events-none no-print w-[90%] max-w-sm"></div>
 
     <script>
-        // ================= STATE & CONFIG =================
+        // Database Setup
         const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-        const PREFIX = 'POLICE_SYS_';
-        const KEY_MEETINGS = PREFIX + 'MEETINGS';
-        const KEY_USERS = PREFIX + 'USERS';
-        const KEY_LOGS = PREFIX + 'LOGS';
-        const KEY_ACTIVE_MEETING = PREFIX + 'ACTIVE';
-
-        let meetings = JSON.parse(localStorage.getItem(KEY_MEETINGS)) || [];
-        let registeredUsers = JSON.parse(localStorage.getItem(KEY_USERS)) || [];
-        let attendanceLogs = JSON.parse(localStorage.getItem(KEY_LOGS)) || [];
-        let currentMeetingId = localStorage.getItem(KEY_ACTIVE_MEETING) || null;
+        const DB_PREFIX = 'MEETING_SYS_';
         
+        let meetings = JSON.parse(localStorage.getItem(DB_PREFIX + 'MEETINGS')) || [];
+        let registeredUsers = JSON.parse(localStorage.getItem(DB_PREFIX + 'USERS')) || [];
+        let attendanceLogs = JSON.parse(localStorage.getItem(DB_PREFIX + 'LOGS')) || [];
+        let currentMeetingId = localStorage.getItem(DB_PREFIX + 'ACTIVE') || null;
+        
+        // App State
         let faceMatcher = null;
-        let chartInstance = null;
+        let isScanningActive = false;
+        let isProcessing = false;
         let activeLogIdForSignature = null;
-        
-        // Kiosk State
-        let isScanningActive = false; // Is the automatic scanner running?
-        let isProcessing = false; // Is it currently showing a badge/pausing?
+        const alertCooldowns = { unknown: 0, alreadyLogged: 0, smile: 0 };
 
-        // DOM Elements
+        // DOM
         const video = document.getElementById('video');
         const canvas = document.createElement('canvas'); 
         canvas.className = 'face-canvas';
         const snapshotCanvas = document.getElementById('snapshot-canvas');
         const btnScanToggle = document.getElementById('btn-scan');
         const meetingSelect = document.getElementById('meeting-select');
+        const scannerLaser = document.getElementById('scanner-laser');
         
-        // Signature
+        // E-Sig
         const sigCanvas = document.getElementById('sig-canvas');
         const sigCtx = sigCanvas.getContext('2d');
         let isDrawing = false;
 
-        // Custom Scrollbar styling injection
-        document.head.insertAdjacentHTML('beforeend', `<style>.custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; } .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }</style>`);
+        // Utility: Responsive Canvas resizing
+        window.addEventListener('resize', () => {
+            if (isScanningActive && video.videoWidth > 0) {
+                faceapi.matchDimensions(canvas, { width: video.clientWidth, height: video.clientHeight });
+            }
+        });
 
-        // ================= HELPERS =================
+        // Toast & Audio
         function showToast(message, type = 'info') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            let styling = 'bg-blue-600 border-blue-500', icon = 'fa-info-circle';
-            if (type === 'success') { styling = 'bg-green-600 border-green-500'; icon = 'fa-check-circle'; }
-            if (type === 'error') { styling = 'bg-red-600 border-red-500'; icon = 'fa-triangle-exclamation'; }
-            if (type === 'gold') { styling = 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white border-yellow-400'; icon = 'fa-crown'; }
+            let styling = 'bg-blue-600', icon = 'fa-info-circle';
+            if (type === 'success') { styling = 'bg-green-600'; icon = 'fa-check-circle'; }
+            if (type === 'error') { styling = 'bg-red-600'; icon = 'fa-triangle-exclamation'; }
+            if (type === 'warning') { styling = 'bg-yellow-500 text-slate-900'; icon = 'fa-hand-paper'; }
+            if (type === 'gold') { styling = 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white'; icon = 'fa-crown'; }
 
-            toast.className = `toast ${styling} text-white px-6 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-bold`;
-            toast.innerHTML = `<i class="${icon} text-xl"></i> ${message}`;
+            toast.className = `toast ${styling} ${type !== 'warning' ? 'text-white' : ''} px-4 py-2.5 rounded-lg shadow-xl border flex items-center gap-2 font-bold text-xs md:text-sm mx-auto w-full`;
+            toast.innerHTML = `<i class="${icon} text-lg"></i> ${message}`;
             container.appendChild(toast);
             
             setTimeout(() => toast.classList.add('show'), 10);
-            setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3500);
+            setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);
         }
 
-        function speakAlert(text) {
+        function speak(text) {
             if ('speechSynthesis' in window) {
-                // Stop any ongoing speech
                 window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'th-TH'; utterance.rate = 1.0; utterance.pitch = 1.1;
-                window.speechSynthesis.speak(utterance);
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'th-TH'; u.rate = 1.1; window.speechSynthesis.speak(u);
             }
         }
 
-        function getGeolocation() {
-            return new Promise((resolve) => {
-                if (!navigator.geolocation) { resolve(null); return; }
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                    (err) => resolve(null),
-                    { enableHighAccuracy: false, timeout: 4000 }
-                );
-            });
-        }
-
-        // Check if user is VIP based on rank/position keywords
-        function isVIP(rank, position) {
-            const str = (rank + " " + position).toLowerCase();
-            const vipKeywords = ['พล.ต', 'ผู้บัญชาการ', 'อธิบดี', 'ผู้บังคับการ', 'ผบ.', 'vip', 'ประธาน'];
-            return vipKeywords.some(kw => str.includes(kw));
-        }
-
-        // Get snapshot from video element
-        function getLiveSnapshot() {
-            snapshotCanvas.width = video.videoWidth;
-            snapshotCanvas.height = video.videoHeight;
-            const ctx = snapshotCanvas.getContext('2d');
-            // Mirror drawing to match video display
-            ctx.translate(snapshotCanvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
-            return snapshotCanvas.toDataURL('image/jpeg', 0.8);
-        }
-
-        // ================= INITIALIZATION =================
+        // Initialize App
         window.addEventListener('load', async () => {
             initMeetingsDropdown();
             setupSignaturePad();
+            updateStatsHeader();
             
             if (typeof faceapi === 'undefined') {
-                document.getElementById('video-loader').innerHTML = '<p class="text-red-500 font-bold">ไม่สามารถโหลด Library ได้ (เช็คอินเตอร์เน็ต)</p>';
+                document.getElementById('video-loader').innerHTML = '<p class="text-red-500 font-bold text-sm">ไม่สามารถโหลด AI Library ได้</p>';
                 return;
             }
 
@@ -424,173 +423,157 @@
                     faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
                     faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
                     faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL) 
+                    faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
                 ]);
                 
                 const badge = document.getElementById('status-badge');
-                badge.className = 'bg-green-900/50 text-green-400 border border-green-700 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-2';
-                badge.innerHTML = '<i class="fa-solid fa-microchip"></i> AI พร้อมทำงาน';
+                badge.className = 'bg-green-900/50 text-green-400 border border-green-700 text-[10px] md:text-xs font-bold px-2 md:px-3 py-1 md:py-1.5 rounded-full flex items-center gap-1 md:gap-2';
+                badge.innerHTML = '<i class="fa-solid fa-microchip"></i> AI พร้อมใช้งาน';
                 
                 buildFaceMatcher();
                 startCamera();
                 renderLogs();
                 populatePinDropdown();
             } catch (err) {
-                console.error(err);
                 document.getElementById('status-badge').innerHTML = '<i class="fa-solid fa-triangle-exclamation text-red-500"></i> AI Error';
             }
         });
 
         function startCamera() {
+            // Request camera, prefer front-facing (good for mobile)
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 } } })
                 .then(stream => { video.srcObject = stream; })
                 .catch(err => {
-                    document.getElementById('video-loader').innerHTML = '<p class="text-red-400 text-center px-4 font-bold"><i class="fa-solid fa-camera-slash text-3xl mb-2"></i><br>ไม่สามารถเข้าถึงกล้องได้<br>กรุณากด Allow บนเบราว์เซอร์</p>';
+                    document.getElementById('video-loader').innerHTML = '<p class="text-red-400 text-center text-xs md:text-sm font-bold px-2"><i class="fa-solid fa-camera-slash text-2xl mb-1"></i><br>กรุณาอนุญาตกล้อง</p>';
                 });
         }
 
-        // ================= MEETING MANAGEMENT =================
+        video.addEventListener('play', () => {
+            document.getElementById('video-loader').style.display = 'none';
+            document.getElementById('video-container').append(canvas);
+            btnScanToggle.disabled = false; document.getElementById('btn-register-mode').disabled = false;
+        });
+
+        // Data Management (Backup/Restore)
+        function exportDatabase() {
+            const data = JSON.stringify({ meetings, users: registeredUsers, logs: attendanceLogs });
+            const blob = new Blob([data], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `smart_meeting_backup_${Date.now()}.json`;
+            a.click(); URL.revokeObjectURL(url);
+            showToast("ส่งออกข้อมูลสำเร็จ", "success");
+        }
+
+        function importDatabase(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if(data.meetings && data.users && data.logs) {
+                        localStorage.setItem(DB_PREFIX + 'MEETINGS', JSON.stringify(data.meetings));
+                        localStorage.setItem(DB_PREFIX + 'USERS', JSON.stringify(data.users));
+                        localStorage.setItem(DB_PREFIX + 'LOGS', JSON.stringify(data.logs));
+                        alert("นำเข้าฐานข้อมูลเรียบร้อย ระบบจะทำการรีเฟรช");
+                        location.reload();
+                    } else throw new Error("Invalid Format");
+                } catch(err) {
+                    alert("ไฟล์ไม่ถูกต้อง หรือเสียหาย");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function clearAllData() {
+            if (prompt("พิมพ์ 'DELETE' เพื่อยืนยันการลบข้อมูลทั้งหมด:") === "DELETE") {
+                localStorage.clear(); location.reload();
+            }
+        }
+
+        // Meeting Management
         function initMeetingsDropdown() {
-            meetingSelect.innerHTML = '<option value="">-- กรุณาสร้างหรือเลือกการประชุม --</option>';
+            meetingSelect.innerHTML = '<option value="">-- เลือกการประชุม --</option>';
             meetings.forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m.id; opt.textContent = m.title;
+                const opt = new Option(m.title, m.id);
                 if(m.id == currentMeetingId) opt.selected = true;
                 meetingSelect.appendChild(opt);
             });
             updateMeetingTitle();
         }
-
         function openNewMeetingModal() { document.getElementById('new-meeting-modal').classList.remove('hidden'); }
-        
         function createNewMeeting() {
             const title = document.getElementById('new-meeting-title').value.trim();
             if(!title) return;
-            const newId = Date.now().toString();
-            meetings.push({ id: newId, title: title, dateCreated: new Date().getTime() });
-            localStorage.setItem(KEY_MEETINGS, JSON.stringify(meetings));
-            
-            currentMeetingId = newId;
-            localStorage.setItem(KEY_ACTIVE_MEETING, currentMeetingId);
-            
+            const id = Date.now().toString();
+            meetings.push({ id, title, dateStr: new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) });
+            localStorage.setItem(DB_PREFIX + 'MEETINGS', JSON.stringify(meetings));
+            currentMeetingId = id; localStorage.setItem(DB_PREFIX + 'ACTIVE', id);
             document.getElementById('new-meeting-title').value = '';
             document.getElementById('new-meeting-modal').classList.add('hidden');
-            
-            initMeetingsDropdown(); renderLogs();
-            showToast(`สร้างและเลือกการประชุม: ${title}`, "success");
+            initMeetingsDropdown(); renderLogs(); updateStatsHeader(); showToast(`สร้างห้อง: ${title}`, "success");
         }
-
         function changeMeeting() {
             currentMeetingId = meetingSelect.value;
-            localStorage.setItem(KEY_ACTIVE_MEETING, currentMeetingId);
-            updateMeetingTitle(); renderLogs();
+            localStorage.setItem(DB_PREFIX + 'ACTIVE', currentMeetingId);
+            updateMeetingTitle(); renderLogs(); updateStatsHeader();
         }
-
         function updateMeetingTitle() {
             const m = meetings.find(x => x.id == currentMeetingId);
-            const titleEl = document.getElementById('table-meeting-title');
             if(m) {
-                titleEl.innerHTML = `<i class="fa-solid fa-folder-open text-blue-400"></i> ${m.title}`;
+                document.getElementById('doc-meeting-title').innerHTML = `<i class="fa-regular fa-file-lines text-blue-600"></i> ${m.title}`;
+                document.getElementById('print-meeting-name').innerText = `เรื่อง: ${m.title}`;
+                document.getElementById('print-meeting-date').innerText = `วันที่: ${m.dateStr}`;
             } else {
-                titleEl.innerHTML = `<i class="fa-solid fa-folder-closed text-slate-500"></i> กรุณาเลือกการประชุม`;
+                document.getElementById('doc-meeting-title').innerHTML = `<i class="fa-regular fa-folder-closed text-slate-500"></i> ใบเซ็นชื่อ (กรุณาเลือก)`;
+                document.getElementById('print-meeting-name').innerText = `เรื่อง: _______________________`;
             }
         }
 
-        // ================= REGISTRATION =================
-        document.getElementById('btn-register-mode').addEventListener('click', () => {
-            const panel = document.getElementById('registration-panel');
-            panel.classList.toggle('hidden');
-        });
-        document.getElementById('btn-cancel-register').addEventListener('click', () => {
-            document.getElementById('registration-panel').classList.add('hidden');
-        });
-
-        document.getElementById('btn-save-face').addEventListener('click', async () => {
-            const type = document.getElementById('reg-type').value;
-            const rank = document.getElementById('reg-rank').value.trim();
-            const fname = document.getElementById('reg-fname').value.trim();
-            const lname = document.getElementById('reg-lname').value.trim();
-            const position = document.getElementById('reg-position').value.trim();
-            const phone = document.getElementById('reg-phone').value.trim();
-            const pin = document.getElementById('reg-pin').value.trim();
-            
-            if (!fname || !lname || pin.length !== 4) {
-                showToast("กรุณากรอกชื่อ นามสกุล และ PIN 4 หลักให้ครบถ้วน", "error"); return;
-            }
-
-            const btn = document.getElementById('btn-save-face');
-            const origHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังวิเคราะห์ใบหน้า...'; btn.disabled = true;
-
-            try {
-                const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
-                if (!detection) throw new Error("No face");
-
-                const descriptorArray = Array.from(detection.descriptor);
-                
-                // Save Logic
-                registeredUsers.push({ 
-                    id: 'usr_' + Date.now(),
-                    type, rank, firstName: fname, lastName: lname, position, phone, pin,
-                    descriptors: [descriptorArray] 
-                });
-
-                localStorage.setItem(KEY_USERS, JSON.stringify(registeredUsers));
-                buildFaceMatcher(); populatePinDropdown();
-                
-                showToast(`ลงทะเบียน ${rank} ${fname} สำเร็จ!`, "success");
-                speakAlert(`ลงทะเบียนเรียบร้อย`);
-                
-                // Clear form
-                ['reg-rank', 'reg-fname', 'reg-lname', 'reg-position', 'reg-phone', 'reg-pin'].forEach(id => document.getElementById(id).value = '');
-                document.getElementById('btn-cancel-register').click();
-
-            } catch (err) {
-                showToast("ไม่พบใบหน้า กรุณามองกล้องชัดๆ", "error");
-            } finally {
-                btn.innerHTML = origHtml; btn.disabled = false;
-            }
-        });
-
-        function buildFaceMatcher() {
-            if (registeredUsers.length === 0) { faceMatcher = null; return; }
-            const labeledDescriptors = registeredUsers.map(user => {
-                const descriptors = user.descriptors.map(desc => new Float32Array(desc));
-                return new faceapi.LabeledFaceDescriptors(user.id, descriptors);
-            });
-            faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.50); // Strict threshold
-        }
-
-        // ================= KIOSK SCANNING LOOP =================
-        video.addEventListener('play', () => {
-            document.getElementById('video-loader').style.display = 'none';
-            document.getElementById('video-container').append(canvas);
-            btnScanToggle.disabled = false;
-            document.getElementById('btn-register-mode').disabled = false;
-        });
+        // UI Logic for Scan/Register
+        document.getElementById('btn-register-mode').addEventListener('click', () => { document.getElementById('registration-panel').classList.toggle('hidden'); });
+        document.getElementById('btn-cancel-register').addEventListener('click', () => { document.getElementById('registration-panel').classList.add('hidden'); });
 
         btnScanToggle.addEventListener('click', () => {
-            if (!currentMeetingId) { showToast("กรุณาเลือกหัวข้อการประชุมก่อนเปิดระบบ", "error"); return; }
-            if (!faceMatcher) { showToast("ไม่มีข้อมูลในระบบ กรุณาลงทะเบียนก่อน", "error"); return; }
+            if (!currentMeetingId) { showToast("โปรดเลือกการประชุมก่อน", "warning"); return; }
+            if (!faceMatcher) { showToast("ยังไม่มีรายชื่อในระบบเลย", "error"); return; }
             
             isScanningActive = !isScanningActive;
             if (isScanningActive) {
-                btnScanToggle.innerHTML = '<i class="fa-solid fa-stop text-2xl"></i> หยุดระบบสแกน';
+                btnScanToggle.innerHTML = '<i class="fa-solid fa-stop text-xl md:text-2xl"></i> หยุดระบบสแกน';
                 btnScanToggle.classList.replace('from-blue-600', 'from-red-600');
                 btnScanToggle.classList.replace('to-blue-800', 'to-red-800');
-                showToast("เปิดระบบ Kiosk สแกนอัตโนมัติแล้ว", "success");
+                scannerLaser.style.display = 'block'; // Show Sci-Fi Laser
+                showToast("ระบบพร้อมสแกน", "success");
                 runScanLoop();
             } else {
-                btnScanToggle.innerHTML = '<i class="fa-solid fa-face-viewfinder text-2xl"></i> เริ่มระบบสแกนอัตโนมัติ';
+                btnScanToggle.innerHTML = '<i class="fa-solid fa-crosshairs text-xl md:text-2xl"></i> เริ่มระบบสแกน';
                 btnScanToggle.classList.replace('from-red-600', 'from-blue-600');
                 btnScanToggle.classList.replace('to-red-800', 'to-blue-800');
-                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); // clear boxes
+                scannerLaser.style.display = 'none';
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
             }
         });
 
+        // The Sci-Fi Box Drawer
+        function drawSciFiBox(ctx, x, y, w, h, color) {
+            ctx.strokeStyle = color; ctx.lineWidth = 3;
+            const len = 20; // length of bracket arms
+            ctx.beginPath();
+            // Top-Left
+            ctx.moveTo(x, y + len); ctx.lineTo(x, y); ctx.lineTo(x + len, y);
+            // Top-Right
+            ctx.moveTo(x + w - len, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + len);
+            // Bottom-Left
+            ctx.moveTo(x, y + h - len); ctx.lineTo(x, y + h); ctx.lineTo(x + len, y + h);
+            // Bottom-Right
+            ctx.moveTo(x + w - len, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - len);
+            ctx.stroke();
+        }
+
         async function runScanLoop() {
             if (!isScanningActive || video.paused || video.ended) return;
-            
             const displaySize = { width: video.clientWidth, height: video.clientHeight };
             faceapi.matchDimensions(canvas, displaySize);
             const ctx = canvas.getContext('2d');
@@ -598,371 +581,230 @@
             if (!isProcessing) {
                 const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceExpressions().withFaceDescriptors();
                 const resizedDetections = faceapi.resizeResults(detections, displaySize);
-                
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                faceapi.draw.drawDetections(canvas, resizedDetections, { boxColor: 'rgba(59, 130, 246, 0.5)' }); 
                 
                 if (detections.length > 0) {
-                    // Pick the largest face if multiple
-                    const detection = detections[0]; 
+                    const detection = detections[0];
                     const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
-                    
-                    if (bestMatch.label !== 'unknown' && bestMatch.distance < 0.5) {
+                    const now = Date.now();
+                    const box = resizedDetections[0].detection.box;
+
+                    if (bestMatch.label === 'unknown') {
+                        drawSciFiBox(ctx, box.x, box.y, box.width, box.height, '#ef4444');
+                        ctx.fillStyle = "red"; ctx.font = "bold 16px Sarabun"; ctx.fillText("ไม่พบข้อมูล", box.x, box.y - 10);
+                        if (now - alertCooldowns.unknown > 5000) { speak("ไม่มีข้อมูล กรุณาติดต่อแอดมิน"); alertCooldowns.unknown = now; }
+                    } else if (bestMatch.distance < 0.5) {
                         const user = registeredUsers.find(u => u.id === bestMatch.label);
-                        
-                        // Check if already checked in
                         const alreadyLogged = attendanceLogs.find(l => l.meetingId === currentMeetingId && l.userId === user.id);
                         
-                        if (!alreadyLogged) {
-                            // Liveness Check (Must Smile)
-                            if (detection.expressions.happy < 0.6) {
-                                ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 5;
-                                ctx.strokeRect(resizedDetections[0].detection.box.x, resizedDetections[0].detection.box.y, resizedDetections[0].detection.box.width, resizedDetections[0].detection.box.height);
-                                ctx.fillStyle = "red"; ctx.font = "bold 24px Sarabun";
-                                ctx.fillText("กรุณายิ้มเพื่อยืนยัน!", resizedDetections[0].detection.box.x, resizedDetections[0].detection.box.y - 10);
+                        if (alreadyLogged) {
+                            drawSciFiBox(ctx, box.x, box.y, box.width, box.height, '#eab308');
+                            ctx.fillStyle = "#eab308"; ctx.font = "bold 16px Sarabun"; ctx.fillText("สแกนไปแล้ว", box.x, box.y - 10);
+                            if (now - alertCooldowns.alreadyLogged > 5000) { speak("ท่านสแกนไปแล้วค่ะ"); alertCooldowns.alreadyLogged = now; }
+                        } else {
+                            if (detection.expressions.happy < 0.5) {
+                                drawSciFiBox(ctx, box.x, box.y, box.width, box.height, '#f97316');
+                                ctx.fillStyle = "#f97316"; ctx.font = "bold 20px Sarabun"; ctx.fillText("[ กรุณายิ้ม ]", box.x + (box.width/4), box.y - 10);
+                                if (now - alertCooldowns.smile > 3000) { speak("กรุณายิ้มเพื่อยืนยันตัวตนค่ะ"); alertCooldowns.smile = now; }
                             } else {
-                                // SUCCESS MATCH!
-                                isProcessing = true; // Pause scanning
-                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                isProcessing = true; ctx.clearRect(0, 0, canvas.width, canvas.height);
                                 
-                                const livePhoto = getLiveSnapshot();
-                                handleSuccessfulScan(user, livePhoto);
+                                snapshotCanvas.width = video.videoWidth; snapshotCanvas.height = video.videoHeight;
+                                const sCtx = snapshotCanvas.getContext('2d'); sCtx.translate(snapshotCanvas.width, 0); sCtx.scale(-1, 1);
+                                sCtx.drawImage(video, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+                                
+                                handleSuccessfulScan(user, snapshotCanvas.toDataURL('image/jpeg', 0.7));
                             }
                         }
                     }
                 }
             }
-            // Loop recursively
             setTimeout(() => requestAnimationFrame(runScanLoop), 200);
         }
 
-        // ================= WOW FEATURES (Badge & VIP) =================
-        async function handleSuccessfulScan(user, livePhotoBase64) {
-            // 1. Get GPS async
-            let location = await getGeolocation();
+        function handleSuccessfulScan(user, photoBase64) {
+            logAttendanceData(user.id);
+            const isVIP = (user.rank + " " + user.position).toLowerCase().match(/(พล.ต|ผบ.|vip|ประธาน|ผู้กำกับ)/);
             
-            // 2. Log to database
-            logAttendanceData(user.id, 'Face Scan', location);
-
-            // 3. Setup Digital Badge UI
+            // UI Kiosk Mode
             const overlay = document.getElementById('badge-overlay');
             const card = document.getElementById('badge-card');
-            const header = document.getElementById('badge-header');
             
-            document.getElementById('badge-photo').src = livePhotoBase64;
+            document.getElementById('badge-photo').src = photoBase64;
             document.getElementById('badge-name').innerText = `${user.firstName} ${user.lastName}`;
-            document.getElementById('badge-rank').innerText = user.rank || (user.type === 'guest' ? 'แขกรับเชิญ' : '');
-            document.getElementById('badge-position').innerText = user.position || '-';
+            document.getElementById('badge-rank').innerText = user.rank || (user.type === 'guest' ? 'แขกรับเชิญ' : 'เจ้าหน้าที่');
+            document.getElementById('badge-position').innerText = user.position || '';
             
-            const meeting = meetings.find(m => m.id === currentMeetingId);
-            document.getElementById('badge-meeting').innerText = meeting ? meeting.title : 'N/A';
-
-            // Check VIP/Type styling
-            const isVipUser = isVIP(user.rank, user.position);
-            
-            if (isVipUser) {
-                header.className = "h-32 bg-gradient-to-r from-yellow-600 to-yellow-800 flex flex-col items-center justify-start pt-4 text-white relative overflow-hidden";
+            if (isVIP) {
+                document.getElementById('badge-header').className = "h-24 md:h-32 bg-gradient-to-r from-yellow-600 to-yellow-800 flex flex-col items-center justify-start pt-3 md:pt-4 text-white relative overflow-hidden";
                 card.classList.add('vip-glow');
                 document.getElementById('badge-type-label').innerHTML = '<i class="fa-solid fa-crown text-gold"></i> V.I.P. GUEST';
-                speakAlert(`สวัสดีค่ะ ท่าน${user.rank} ${user.firstName} ยินดีต้อนรับเข้าสู่การประชุมค่ะ`);
-                showToast(`VIP Checked In: ${user.firstName}`, 'gold');
-            } else if (user.type === 'guest') {
-                header.className = "h-32 bg-slate-600 flex flex-col items-center justify-start pt-4 text-white relative overflow-hidden";
-                card.classList.remove('vip-glow');
-                document.getElementById('badge-type-label').innerHTML = '<i class="fa-solid fa-user-tag text-slate-300"></i> แขกรับเชิญ';
-                speakAlert(`สวัสดีคุณ ${user.firstName} ยินดีต้อนรับค่ะ`);
-                showToast(`Guest Checked In: ${user.firstName}`, 'success');
+                speak(`ยินดีต้อนรับ ท่าน ${user.rank} ${user.firstName}`);
             } else {
-                // Normal Police
-                header.className = "h-32 bg-blue-900 flex flex-col items-center justify-start pt-4 text-white relative overflow-hidden";
+                document.getElementById('badge-header').className = user.type === 'guest' ? "h-24 md:h-32 bg-slate-600 flex flex-col items-center justify-start pt-3 md:pt-4 text-white relative overflow-hidden" : "h-24 md:h-32 bg-blue-900 flex flex-col items-center justify-start pt-3 md:pt-4 text-white relative overflow-hidden";
                 card.classList.remove('vip-glow');
-                document.getElementById('badge-type-label').innerHTML = '<i class="fa-solid fa-shield-halved text-blue-300"></i> เจ้าหน้าที่';
-                speakAlert(`สวัสดี ${user.rank} ${user.firstName}`);
-                showToast(`Checked In: ${user.firstName}`, 'success');
+                document.getElementById('badge-type-label').innerHTML = user.type === 'guest' ? 'แขกรับเชิญ' : 'เจ้าหน้าที่';
+                speak(`สวัสดี ${user.rank || 'คุณ'} ${user.firstName}`);
             }
 
-            // 4. Show Animation
-            overlay.classList.remove('hidden');
-            card.classList.remove('scale-0');
-            card.classList.add('badge-enter');
+            overlay.classList.remove('hidden'); card.classList.remove('scale-0'); card.classList.add('badge-enter');
 
-            // 5. Auto-Reset after 4 seconds (Kiosk mode)
+            // Kiosk Touchless Auto-Reset (Clear screen after 4 seconds)
             setTimeout(() => {
-                card.classList.remove('badge-enter');
-                card.classList.add('scale-0');
-                setTimeout(() => {
-                    overlay.classList.add('hidden');
-                    isProcessing = false; // Resume scanning
-                }, 300);
-            }, 4500);
+                card.classList.remove('badge-enter'); card.classList.add('scale-0');
+                setTimeout(() => { overlay.classList.add('hidden'); isProcessing = false; }, 300);
+            }, 4000);
         }
 
-        // ================= FALLBACK & LOGGING =================
-        function populatePinDropdown() {
-            const select = document.getElementById('pin-name-select');
-            select.innerHTML = '<option value="">-- เลือกชื่อของคุณ --</option>';
-            registeredUsers.forEach(user => {
-                const opt = document.createElement('option');
-                opt.value = user.id; opt.textContent = `${user.rank || ''} ${user.firstName} ${user.lastName}`;
-                select.appendChild(opt);
-            });
-        }
+        // Database logic for Registration & Logging
+        document.getElementById('btn-save-face').addEventListener('click', async () => {
+            const fData = ['reg-type','reg-rank','reg-fname','reg-lname','reg-position','reg-phone','reg-pin'].reduce((acc, id) => { acc[id] = document.getElementById(id).value.trim(); return acc; }, {});
+            if (!fData['reg-fname'] || !fData['reg-lname'] || fData['reg-pin'].length !== 4) { showToast("กรอกชื่อ, สกุล และ PIN 4 หลักให้ครบ", "error"); return; }
 
-        async function submitPinCheckin() {
-            if (!currentMeetingId) { showToast("กรุณาเลือกหัวข้อการประชุมก่อน", "error"); return; }
-            const userId = document.getElementById('pin-name-select').value;
-            const pin = document.getElementById('pin-input').value;
-            
-            if(!userId) { showToast("กรุณาเลือกชื่อ", "error"); return; }
-            
-            const user = registeredUsers.find(u => u.id === userId);
-            const alreadyLogged = attendanceLogs.find(l => l.meetingId === currentMeetingId && l.userId === user.id);
-            if (alreadyLogged) { showToast("ลงทะเบียนไปแล้ว", "info"); return; }
+            const btn = document.getElementById('btn-save-face'); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังสแกน...'; btn.disabled = true;
 
-            if (user && user.pin === pin) {
-                document.getElementById('pin-modal').classList.add('hidden');
-                document.getElementById('pin-input').value = '';
+            try {
+                const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
+                if (!detection) throw new Error("No face");
                 
-                // Show generic badge for PIN
-                isProcessing = true; // pause camera if running
-                let loc = await getGeolocation();
-                handleSuccessfulScan(user, 'https://placehold.co/400x400/1e293b/ffffff?text=PIN+LOGIN'); // Placeholder image
+                registeredUsers.push({ id: 'u_' + Date.now(), type: fData['reg-type'], rank: fData['reg-rank'], firstName: fData['reg-fname'], lastName: fData['reg-lname'], position: fData['reg-position'], phone: fData['reg-phone'], pin: fData['reg-pin'], descriptors: [Array.from(detection.descriptor)] });
+                localStorage.setItem(DB_PREFIX + 'USERS', JSON.stringify(registeredUsers));
+                buildFaceMatcher(); populatePinDropdown(); updateStatsHeader();
                 
-            } else {
-                showToast("รหัส PIN ไม่ถูกต้อง!", "error");
-                document.getElementById('pin-input').value = '';
-            }
+                showToast(`บันทึกหน้าสำเร็จ`, "success"); speak('ลงทะเบียนเสร็จสิ้น');
+                ['reg-rank', 'reg-fname', 'reg-lname', 'reg-position', 'reg-phone', 'reg-pin'].forEach(id => document.getElementById(id).value = '');
+                document.getElementById('btn-cancel-register').click();
+            } catch (err) { showToast("ไม่พบใบหน้า ให้มองกล้องตรงๆ", "error"); } 
+            finally { btn.innerHTML = '<i class="fa-solid fa-camera-retro"></i> สแกนเพื่อบันทึก'; btn.disabled = false; }
+        });
+
+        function buildFaceMatcher() {
+            if(registeredUsers.length === 0) { faceMatcher = null; return; }
+            const labeled = registeredUsers.map(u => new faceapi.LabeledFaceDescriptors(u.id, u.descriptors.map(d => new Float32Array(d))));
+            faceMatcher = new faceapi.FaceMatcher(labeled, 0.45); // Stricter matching
         }
 
-        function logAttendanceData(userId, method, location) {
-            const logEntry = {
-                id: Date.now(),
-                meetingId: currentMeetingId,
-                userId: userId,
-                method: method,
-                timestamp: new Date().getTime(),
-                location: location,
-                status: 'Self', // Default
-                proxyName: '',
-                signatureBase64: null
-            };
-            attendanceLogs.push(logEntry);
-            localStorage.setItem(KEY_LOGS, JSON.stringify(attendanceLogs));
-            renderLogs();
+        function logAttendanceData(userId) {
+            attendanceLogs.push({ id: Date.now(), meetingId: currentMeetingId, userId, timestamp: Date.now(), status: 'มาด้วยตนเอง', proxyName: '', signatureBase64: null });
+            localStorage.setItem(DB_PREFIX + 'LOGS', JSON.stringify(attendanceLogs));
+            renderLogs(); updateStatsHeader();
         }
 
-        // ================= TABLE RENDER & MANAGEMENT =================
         function renderLogs() {
-            const tbody = document.getElementById('attendance-log-body');
-            tbody.innerHTML = '';
-            
-            if(!currentMeetingId) {
-                tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500 font-bold"><i class="fa-solid fa-inbox text-3xl mb-2 block"></i> ยังไม่ได้เลือกการประชุม</td></tr>';
-                document.getElementById('meeting-count-badge').innerText = `ผู้เข้าร่วม: 0 คน`;
-                return;
-            }
+            const tbody = document.getElementById('attendance-log-body'); tbody.innerHTML = '';
+            if(!currentMeetingId) { tbody.innerHTML = '<tr><td colspan="6" class="p-4 md:p-8 text-center text-slate-500 font-bold bg-white">ยังไม่ได้เลือกการประชุม</td></tr>'; return; }
 
-            const meetingLogs = attendanceLogs.filter(log => log.meetingId === currentMeetingId).sort((a,b) => b.timestamp - a.timestamp);
-            document.getElementById('meeting-count-badge').innerText = `ผู้เข้าร่วม: ${meetingLogs.length} คน`;
+            const meetingLogs = attendanceLogs.filter(log => log.meetingId === currentMeetingId).sort((a,b) => a.timestamp - b.timestamp);
+            if (meetingLogs.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="p-4 md:p-8 text-center text-slate-500 font-bold bg-white">ยังไม่มีผู้ลงทะเบียน</td></tr>'; return; }
 
-            if (meetingLogs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500 font-bold">ยังไม่มีผู้ลงทะเบียนเข้าร่วม</td></tr>';
-                return;
-            }
-
-            meetingLogs.forEach(log => {
-                const user = registeredUsers.find(u => u.id === log.userId);
-                if(!user) return;
-
-                const timeStr = new Date(log.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+            meetingLogs.forEach((log, idx) => {
+                const user = registeredUsers.find(u => u.id === log.userId) || {};
+                const time = new Date(log.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
                 
-                // Styling based on user type & VIP
-                const isVip = isVIP(user.rank, user.position);
-                const nameStyle = isVip ? 'text-yellow-400' : 'text-blue-200';
-                const tagStyle = user.type === 'guest' 
-                    ? '<span class="bg-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded border border-slate-600">บุคคลภายนอก</span>'
-                    : '<span class="bg-blue-900 text-blue-200 text-[10px] px-2 py-0.5 rounded border border-blue-700">ตำรวจ</span>';
-                
-                const gpsHtml = log.location 
-                    ? `<a href="https://www.google.com/maps?q=${log.location.lat},${log.location.lng}" target="_blank" class="text-green-400 hover:text-green-300 ml-2" title="ดูแผนที่"><i class="fa-solid fa-location-dot"></i> GPS</a>` : '';
+                let selectHtml = `<select onchange="updateProxy(${log.id}, this)" class="w-full bg-slate-50 border border-slate-300 text-xs rounded p-1 outline-none no-print"><option value="มาด้วยตนเอง" ${log.status==='มาด้วยตนเอง'?'selected':''}>มาด้วยตนเอง</option><option value="ผู้แทน" ${log.status==='ผู้แทน'?'selected':''}>มีผู้แทน...</option></select>`;
+                let printHtml = `<div class="hidden print:block text-xs">${log.status}${log.proxyName ? '<br>(แทน: '+log.proxyName+')' : ''}</div>`;
+                if(log.status === 'ผู้แทน' && log.proxyName) selectHtml += `<div class="text-[10px] text-orange-600 mt-1 font-bold truncate">แทน: ${log.proxyName}</div>`;
 
-                // Proxy Logic
-                const selSelf = log.status === 'Self' ? 'selected' : '';
-                const selProxy = log.status === 'Proxy' ? 'selected' : '';
-                const proxyText = log.status === 'Proxy' && log.proxyName 
-                    ? `<div class="text-xs text-orange-400 mt-1 flex items-center gap-1"><i class="fa-solid fa-user-tie"></i> ผู้แทน: ${log.proxyName}</div>` : '';
+                let sigHtml = log.signatureBase64 
+                    ? `<img src="${log.signatureBase64}" class="h-6 md:h-8 w-auto mx-auto cursor-pointer" onclick="openSignature(${log.id})">` 
+                    : `<button onclick="openSignature(${log.id})" class="text-[10px] md:text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded w-full no-print">เซ็นชื่อ</button><div class="hidden print:block h-6 border-b border-dotted border-gray-400"></div>`;
 
-                // Signature Logic
-                let sigHtml = '';
-                if(log.signatureBase64) {
-                    sigHtml = `<img src="${log.signatureBase64}" class="h-12 w-full object-contain mx-auto border border-slate-600 bg-slate-50 rounded cursor-pointer hover:opacity-80 transition" onclick="openSignature(${log.id})" title="คลิกเพื่อเซ็นใหม่">`;
-                } else {
-                    sigHtml = `<button onclick="openSignature(${log.id})" class="text-xs bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white py-1.5 px-3 rounded shadow transition w-full"><i class="fa-solid fa-pen"></i> เซ็นชื่อ</button>`;
-                }
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="p-4 text-slate-400 font-mono align-top text-center border-b border-slate-700/50">${timeStr}</td>
-                    <td class="p-4 align-top border-b border-slate-700/50">
-                        <div class="font-bold text-base ${nameStyle}">${user.rank || ''} ${user.firstName} ${user.lastName} ${isVip ? '<i class="fa-solid fa-crown text-[10px] ml-1"></i>' : ''}</div>
-                        <div class="text-xs text-slate-400 mt-1 space-y-0.5">
-                            <div>${user.position ? `<i class="fa-solid fa-briefcase w-4 text-center"></i> ${user.position}` : ''}</div>
-                            <div>${user.phone ? `<i class="fa-solid fa-phone w-4 text-center"></i> ${user.phone}` : ''}</div>
-                        </div>
-                        <div class="mt-2 flex items-center gap-1">${tagStyle} <span class="text-[10px] text-slate-500 ml-2 border-l border-slate-600 pl-2">เข้าด้วย: ${log.method}</span> ${gpsHtml}</div>
-                    </td>
-                    <td class="p-4 align-top border-b border-slate-700/50">
-                        <select onchange="updateLogStatus(${log.id}, this)" class="bg-slate-800 border border-slate-600 text-slate-200 text-sm rounded focus:border-blue-500 block p-1.5 w-full outline-none">
-                            <option value="Self" ${selSelf}>มาด้วยตัวเอง</option>
-                            <option value="Proxy" ${selProxy}>มาโดยผู้แทน</option>
-                        </select>
-                        ${proxyText}
-                    </td>
-                    <td class="p-4 align-middle border-b border-slate-700/50">
-                        ${sigHtml}
-                    </td>
-                    <td class="p-4 align-middle text-center border-b border-slate-700/50">
-                         <button onclick="deleteLog(${log.id})" class="text-red-500 hover:text-red-400 p-2"><i class="fa-solid fa-trash"></i></button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr class="hover:bg-slate-50 transition bg-white">
+                        <td class="p-2 border border-slate-300 text-center font-bold text-slate-600">${idx + 1}</td>
+                        <td class="p-2 border border-slate-300 text-center font-mono text-slate-500">${time}</td>
+                        <td class="p-2 border border-slate-300 font-bold text-slate-800"><div class="truncate max-w-[120px] md:max-w-[200px]">${user.rank||''} ${user.firstName||''} ${user.lastName||''}</div></td>
+                        <td class="p-2 border border-slate-300 text-slate-600 text-[10px] md:text-xs"><div class="truncate max-w-[100px] md:max-w-xs">${user.position||'-'}</div></td>
+                        <td class="p-1 md:p-2 border border-slate-300 align-middle">${sigHtml}</td>
+                        <td class="p-1 md:p-2 border border-slate-300 align-top">${selectHtml}${printHtml}</td>
+                    </tr>
+                `);
             });
         }
 
-        function updateLogStatus(logId, selectElem) {
-            const status = selectElem.value;
+        function updateStatsHeader() {
+            const tot = registeredUsers.length; document.getElementById('stat-total-reg').innerText = tot;
+            if(!currentMeetingId) { document.getElementById('stat-total-in').innerText=0; document.getElementById('stat-total-miss').innerText=tot; return; }
+            const inCount = attendanceLogs.filter(l => l.meetingId === currentMeetingId).length;
+            document.getElementById('stat-total-in').innerText = inCount;
+            document.getElementById('stat-total-miss').innerText = Math.max(0, tot - inCount);
+        }
+
+        function updateProxy(logId, sel) {
             const log = attendanceLogs.find(l => l.id == logId);
             if(!log) return;
-
-            log.status = status;
-            if(status === 'Proxy') {
-                const proxy = prompt("กรุณาระบุยศ-ชื่อ-นามสกุล ของผู้แทนที่มาร่วมประชุม:");
-                if(proxy) { log.proxyName = proxy; } 
-                else { selectElem.value = 'Self'; log.status = 'Self'; }
-            } else {
-                log.proxyName = '';
-            }
-            localStorage.setItem(KEY_LOGS, JSON.stringify(attendanceLogs));
-            renderLogs();
+            log.status = sel.value;
+            if(sel.value === 'ผู้แทน') {
+                const p = prompt("ระบุยศ-ชื่อ-สกุล ผู้มาแทน:");
+                if(p) log.proxyName = p; else { sel.value = 'มาด้วยตนเอง'; log.status = 'มาด้วยตนเอง'; }
+            } else log.proxyName = '';
+            localStorage.setItem(DB_PREFIX + 'LOGS', JSON.stringify(attendanceLogs)); renderLogs();
         }
 
-        function deleteLog(logId) {
-            if(confirm("ยืนยันการลบรายชื่อนี้ออกจากการประชุม?")) {
-                attendanceLogs = attendanceLogs.filter(l => l.id != logId);
-                localStorage.setItem(KEY_LOGS, JSON.stringify(attendanceLogs));
-                renderLogs();
-            }
+        // Exports
+        function exportToPDF() {
+            if(!currentMeetingId) { showToast("เลือกการประชุมก่อน", "error"); return; }
+            window.print();
+        }
+        function exportToExcel() {
+            if(!currentMeetingId) { showToast("เลือกการประชุมก่อน", "error"); return; }
+            const mLogs = attendanceLogs.filter(log => log.meetingId === currentMeetingId).sort((a,b) => a.timestamp - b.timestamp);
+            const data = mLogs.map((log, i) => {
+                const u = registeredUsers.find(x => x.id === log.userId) || {};
+                return { "ลำดับ": i+1, "เวลา": new Date(log.timestamp).toLocaleTimeString('th-TH'), "ยศ-ชื่อ": `${u.rank||''} ${u.firstName||''} ${u.lastName||''}`, "ตำแหน่ง": u.position||'-', "เบอร์": u.phone||'-', "สถานะ": log.status, "ผู้แทน": log.proxyName||'-' };
+            });
+            const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+            XLSX.writeFile(wb, `ใบเซ็นชื่อ_${Date.now()}.xlsx`); showToast("โหลด Excel สำเร็จ", "success");
         }
 
-        // ================= SIGNATURE PAD =================
+        // Signature Logic
         function setupSignaturePad() {
-            sigCanvas.addEventListener('mousedown', (e) => { isDrawing = true; drawSig(e); });
-            sigCanvas.addEventListener('mouseup', () => { isDrawing = false; sigCtx.beginPath(); });
-            sigCanvas.addEventListener('mousemove', drawSig);
-            
-            sigCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); isDrawing = true; drawSig(e.touches[0]); }, {passive: false});
-            sigCanvas.addEventListener('touchend', (e) => { e.preventDefault(); isDrawing = false; sigCtx.beginPath(); }, {passive: false});
-            sigCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); drawSig(e.touches[0]); }, {passive: false});
+            const getPos = (e) => {
+                const rect = sigCanvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                // Calculate correct position considering fluid width via CSS
+                const scaleX = sigCanvas.width / rect.width;
+                const scaleY = sigCanvas.height / rect.height;
+                return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+            };
+            const start = (e) => { e.preventDefault(); isDrawing = true; const pos = getPos(e); sigCtx.beginPath(); sigCtx.moveTo(pos.x, pos.y); };
+            const draw = (e) => { if(!isDrawing) return; e.preventDefault(); const pos = getPos(e); sigCtx.lineTo(pos.x, pos.y); sigCtx.lineWidth = 3; sigCtx.strokeStyle = '#000'; sigCtx.stroke(); };
+            const stop = () => { isDrawing = false; };
+            sigCanvas.addEventListener('mousedown', start); sigCanvas.addEventListener('mousemove', draw); window.addEventListener('mouseup', stop);
+            sigCanvas.addEventListener('touchstart', start, {passive:false}); sigCanvas.addEventListener('touchmove', draw, {passive:false}); window.addEventListener('touchend', stop);
         }
-
-        function drawSig(e) {
-            if (!isDrawing) return;
-            sigCtx.lineWidth = 3; sigCtx.lineCap = 'round'; sigCtx.strokeStyle = '#0f172a';
-            const rect = sigCanvas.getBoundingClientRect();
-            let x = e.clientX - rect.left; let y = e.clientY - rect.top;
-            
-            sigCtx.lineTo(x, y); sigCtx.stroke();
-            sigCtx.beginPath(); sigCtx.moveTo(x, y);
-        }
-
-        function openSignature(logId) {
-            activeLogIdForSignature = logId;
-            const log = attendanceLogs.find(l => l.id == logId);
-            const user = registeredUsers.find(u => u.id == log.userId);
-            document.getElementById('sig-modal-desc').innerText = `ลายมือชื่อ: ${user.rank || ''} ${user.firstName} ${user.lastName}`;
-            clearSignatureCanvas();
-            document.getElementById('signature-modal').classList.remove('hidden');
-        }
-
-        function closeSignatureModal() { document.getElementById('signature-modal').classList.add('hidden'); activeLogIdForSignature = null; }
+        function openSignature(id) { activeLogIdForSignature = id; document.getElementById('signature-modal').classList.remove('hidden'); clearSignatureCanvas(); }
+        function closeSignatureModal() { document.getElementById('signature-modal').classList.add('hidden'); }
         function clearSignatureCanvas() { sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height); }
-
         function saveSignature() {
-            if(!activeLogIdForSignature) return;
             const blank = document.createElement('canvas'); blank.width = sigCanvas.width; blank.height = sigCanvas.height;
-            if(sigCanvas.toDataURL() === blank.toDataURL()) { showToast("กรุณาเซ็นชื่อก่อน", "error"); return; }
-
+            if(sigCanvas.toDataURL() === blank.toDataURL()) return showToast("กรุณาเซ็นชื่อก่อน", "error");
             const log = attendanceLogs.find(l => l.id == activeLogIdForSignature);
-            if(log) {
-                log.signatureBase64 = sigCanvas.toDataURL('image/png');
-                localStorage.setItem(KEY_LOGS, JSON.stringify(attendanceLogs)); renderLogs();
-            }
-            closeSignatureModal(); showToast("บันทึกลายเซ็นเรียบร้อย", "success");
+            if(log) { log.signatureBase64 = sigCanvas.toDataURL('image/png'); localStorage.setItem(DB_PREFIX + 'LOGS', JSON.stringify(attendanceLogs)); renderLogs(); }
+            closeSignatureModal();
         }
 
-        // ================= ADMIN DASHBOARD =================
+        // PIN & Admin Fallbacks
+        function populatePinDropdown() {
+            const sel = document.getElementById('pin-name-select'); sel.innerHTML = '<option value="">-- เลือกชื่อ --</option>';
+            registeredUsers.forEach(u => sel.appendChild(new Option(`${u.rank||''} ${u.firstName}`, u.id)));
+        }
+        function submitPinCheckin() {
+            if(!currentMeetingId) return showToast("เลือกการประชุมก่อน", "error");
+            const u = registeredUsers.find(x => x.id === document.getElementById('pin-name-select').value);
+            if(u && u.pin === document.getElementById('pin-input').value) {
+                if(attendanceLogs.find(l => l.meetingId === currentMeetingId && l.userId === u.id)) return showToast("ลงทะเบียนไปแล้ว", "warning");
+                document.getElementById('pin-modal').classList.add('hidden'); document.getElementById('pin-input').value = '';
+                isProcessing = true; handleSuccessfulScan(u, 'https://placehold.co/400x400/1e293b/ffffff?text=PIN+LOGIN');
+            } else showToast("รหัสไม่ถูกต้อง", "error");
+        }
         function promptAdminLogin() {
-            const pwd = prompt("กรุณาใส่รหัสผ่านผู้ดูแลระบบ (Hint: admin123):");
-            if (pwd === "admin123") {
+            if (prompt("รหัสผ่าน (admin123):") === "admin123") {
                 document.getElementById('admin-modal').classList.remove('hidden');
-                renderDashboard();
-            } else if (pwd !== null) {
-                showToast("รหัสผ่านไม่ถูกต้อง!", "error");
-            }
-        }
-
-        function renderDashboard() {
-            document.getElementById('stat-meetings').innerText = meetings.length;
-            document.getElementById('stat-users').innerText = registeredUsers.length;
-            
-            let totalSelf = 0, totalProxy = 0;
-            attendanceLogs.forEach(l => { if(l.status === 'Self') totalSelf++; if(l.status === 'Proxy') totalProxy++; });
-            document.getElementById('stat-self').innerText = totalSelf; document.getElementById('stat-proxy').innerText = totalProxy;
-
-            const mNames = [], mCounts = [];
-            const sortedMeetings = [...meetings].reverse().slice(0, 6);
-            sortedMeetings.forEach(m => {
-                mNames.push(m.title.length > 15 ? m.title.substring(0,15)+'...' : m.title);
-                mCounts.push(attendanceLogs.filter(l => l.meetingId === m.id).length);
-            });
-
-            const ctx = document.getElementById('attendanceChart').getContext('2d');
-            if(chartInstance) chartInstance.destroy();
-            
-            Chart.defaults.color = '#94a3b8';
-            chartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: mNames,
-                    datasets: [{
-                        label: 'จำนวนผู้เข้าประชุม', data: mCounts,
-                        backgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: '#3b82f6',
-                        borderWidth: 1, borderRadius: 6
-                    }]
-                },
-                options: { 
-                    responsive: true, maintainAspectRatio: false, 
-                    plugins: { legend: { display: false } },
-                    scales: { 
-                        y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#334155' } },
-                        x: { grid: { display: false } }
-                    } 
-                }
-            });
-        }
-
-        function clearAllData() {
-            if (confirm("อันตราย! การดำเนินการนี้จะลบข้อมูลประวัติการประชุม และรายชื่อทั้งหมด คุณแน่ใจหรือไม่?")) {
-                localStorage.removeItem(KEY_USERS); localStorage.removeItem(KEY_LOGS);
-                localStorage.removeItem(KEY_MEETINGS); localStorage.removeItem(KEY_ACTIVE_MEETING);
-                
-                registeredUsers = []; attendanceLogs = []; meetings = []; currentMeetingId = null;
-                faceMatcher = null;
-                
-                initMeetingsDropdown(); renderLogs(); renderDashboard(); populatePinDropdown();
-                document.getElementById('admin-modal').classList.add('hidden');
-                showToast("ล้างข้อมูลทั้งหมดสำเร็จ", "success");
-            }
+                document.getElementById('stat-meetings').innerText = meetings.length;
+                document.getElementById('stat-users').innerText = registeredUsers.length;
+            } else showToast("รหัสผิด", "error");
         }
     </script>
 </body>
