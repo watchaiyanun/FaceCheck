@@ -626,7 +626,14 @@
 
                     if (bestMatch.label === 'unknown') {
                         drawSciFiBox(ctx, box.x, box.y, box.width, box.height, '#ef4444');
-                        ctx.fillStyle = "red"; ctx.font = "bold 16px Sarabun"; ctx.fillText("ไม่พบข้อมูล", box.x, box.y - 10);
+                        // พลิกตัวอักษรกลับให้หักล้างกับ CSS หน้ากระจก
+                        ctx.save();
+                        ctx.translate(box.x + box.width / 2, box.y - 10);
+                        ctx.scale(-1, 1);
+                        ctx.fillStyle = "red"; ctx.font = "bold 18px Sarabun"; ctx.textAlign = "center";
+                        ctx.fillText("ไม่พบข้อมูล", 0, 0);
+                        ctx.restore();
+                        
                         if (now - alertCooldowns.unknown > 10000) { // หน่วงเวลา 10 วินาทีเพื่อไม่ให้เด้งรัวๆ
                             speak("ไม่มีข้อมูลในระบบ ต้องการลงทะเบียนหรือไม่คะ?"); 
                             alertCooldowns.unknown = now;
@@ -638,12 +645,26 @@
                         
                         if (alreadyLogged) {
                             drawSciFiBox(ctx, box.x, box.y, box.width, box.height, '#eab308');
-                            ctx.fillStyle = "#eab308"; ctx.font = "bold 16px Sarabun"; ctx.fillText("สแกนไปแล้ว", box.x, box.y - 10);
+                            // พลิกตัวอักษรกลับ
+                            ctx.save();
+                            ctx.translate(box.x + box.width / 2, box.y - 10);
+                            ctx.scale(-1, 1);
+                            ctx.fillStyle = "#eab308"; ctx.font = "bold 18px Sarabun"; ctx.textAlign = "center";
+                            ctx.fillText("สแกนไปแล้ว", 0, 0);
+                            ctx.restore();
+                            
                             if (now - alertCooldowns.alreadyLogged > 5000) { speak("ท่านสแกนไปแล้วค่ะ"); alertCooldowns.alreadyLogged = now; }
                         } else {
                             if (detection.expressions.happy < 0.5) {
                                 drawSciFiBox(ctx, box.x, box.y, box.width, box.height, '#f97316');
-                                ctx.fillStyle = "#f97316"; ctx.font = "bold 20px Sarabun"; ctx.fillText("[ กรุณายิ้ม ]", box.x + (box.width/4), box.y - 10);
+                                // พลิกตัวอักษรกลับ
+                                ctx.save();
+                                ctx.translate(box.x + box.width / 2, box.y - 10);
+                                ctx.scale(-1, 1);
+                                ctx.fillStyle = "#f97316"; ctx.font = "bold 20px Sarabun"; ctx.textAlign = "center";
+                                ctx.fillText("[ กรุณายิ้ม ]", 0, 0);
+                                ctx.restore();
+                                
                                 if (now - alertCooldowns.smile > 3000) { speak("กรุณายิ้มเพื่อยืนยันตัวตนค่ะ"); alertCooldowns.smile = now; }
                             } else {
                                 isProcessing = true; ctx.clearRect(0, 0, canvas.width, canvas.height);
